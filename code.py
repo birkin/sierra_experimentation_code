@@ -24,11 +24,22 @@ HTTPBASIC_SECRET = os.environ['SAE__HTTPBASIC_PASSWORD']
 
 ## ok, let's get to work! ##
 
-## get the token
+## get the token; looks like it's good for an hour
 
-url = '%stoken' % API_ROOT_URL
-log.debug( 'url for token, ```%s```' % url )
+token_url = '%stoken' % API_ROOT_URL
+log.debug( 'token_url, ```%s```' % token_url )
+r = requests.post( token_url, auth=HTTPBasicAuth(HTTPBASIC_KEY, HTTPBASIC_SECRET) )
+log.debug( 'token r.content, ```%s```' % r.content )
+token = r.json()['access_token']
+log.debug( 'token, ```%s```' % token )
 
+## make a bib-request
+
+bib_url = '%sbibs/?id=1000001' % API_ROOT_URL
+log.debug( 'token_url, ```%s```' % token_url )
+custom_headers = {'Authorization': 'Bearer %s' % token }
+r = requests.get( bib_url, headers=custom_headers )
+log.debug( 'bib r.content, ```%s```' % r.content )
 
 
 
