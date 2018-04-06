@@ -21,6 +21,7 @@ if (sys.version_info < (3, 0)):
 API_ROOT_URL = os.environ['SAE__ROOT_URL']
 HTTPBASIC_KEY = os.environ['SAE__HTTPBASIC_USERNAME']
 HTTPBASIC_SECRET = os.environ['SAE__HTTPBASIC_PASSWORD']
+FILE_DOWNLOAD_DIR = os.environ['SAE__FILE_DOWNLOAD_DIR']
 
 ## ok, let's get to work! ##
 
@@ -33,15 +34,20 @@ log.debug( 'token r.content, ```%s```' % r.content )
 token = r.json()['access_token']
 log.debug( 'token, ```%s```' % token )
 
-## make a bib-request, just as a test
+# ===================================
+# make a bib-request, just as a test
+# ===================================
 
-# bib_url = '%sbibs/?id=1000001' % API_ROOT_URL
 bib_url = '%sbibs/' % API_ROOT_URL
 payload = { 'id': '1000001' }
 log.debug( 'token_url, ```%s```' % token_url )
 custom_headers = {'Authorization': 'Bearer %s' % token }
 r = requests.get( bib_url, headers=custom_headers, params=payload )
 log.debug( 'bib r.content, ```%s```' % r.content )
+
+# ===================================
+# get 'last' bib
+# ===================================
 
 ## ok, we have the first bib, let's get the last (hack, close to the last)
 """
@@ -60,4 +66,61 @@ log.debug( 'bib r.content, ```%s```' % r.content )
 end_bib = r.json()['entries'][0]['id']
 log.debug( 'end_bib, `%s`' % end_bib )
 
+# ===================================
+# detour, grab range of marc records
+# ===================================
 
+log.debug( '\n-------\ngetting small-range of marc records\n-------' )
+marc_url = '%sbibs/marc' % API_ROOT_URL
+payload = { 'id': '[1716554,1716564]' }  # i'll check these 10 records against the output of a saved-file, from this range, from the admin-corner script.
+r = requests.get( marc_url, headers=custom_headers, params=payload )
+log.debug( 'bib r.content, ```%s```' % r.content )
+file_url = r.json()['file']
+log.debug( 'file_url, ```%s```' % file_url )
+
+log.debug( '\n-------\ndownloading the marc file\n-------' )
+r = requests.get( file_url, headers=custom_headers )
+filepath = '%s/test.mrc' % FILE_DOWNLOAD_DIR
+with open(filepath, 'wb') as file_handler:
+    for chunk in r.iter_content( chunk_size=128 ):
+        file_handler.write( chunk )
+log.debug( 'file written to ```%s```' % filepath )
+
+
+
+
+def get_record_sets(record_range, testing=False, settings=None):
+    """Divides a set of record into sets based on the number specified
+    in settings.py."""
+    #Calculations to divide the bib set up into five parts.
+    start = record_range['start_rec_int']
+    end = record_range['end_rec_int']
+    our_range = end - start
+
+    set_chunks = settings.EXPORT_CHUNKS
+
+    chunk = our_range / set_chunks
+
+    range_sets = []
+
+    for rec_set in range(1, set_chunks + 1):
+        if rec_set == 1:
+            this_start = start
+            this_end = start + chunk
+        else:
+           this_start = last_end + 1
+           this_end = this_start + chunk
+           if this_end > end:
+               this_end = end
+        _d = {}
+        _d['start'] = "%s%da" % (settings.RECORD_PREFIX, this_start)
+        #If the testing variable exists, only do 10 recs per set.
+        if testing:
+            _d['end'] = "%s%da" % (settings.RECORD_PREFIX, this_start + settings.TEST_SET_SIZE)
+        else:
+             _d['end'] = "%s%da" % (settings.RECORD_PREFIX, this_end)
+        last_end = this_end
+        range_sets.append(_d)
+
+    log.debug( 'range_sets, ```%s```' % pprint.pformat(range_sets) )
+    return range_sets
